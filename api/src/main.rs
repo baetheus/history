@@ -1,7 +1,6 @@
-mod errors;
-mod filters;
-mod handlers;
-mod models;
+pub mod filters;
+pub mod handlers;
+pub mod models;
 
 use redis::Client;
 use std::env;
@@ -34,7 +33,7 @@ async fn main() {
         .await
         .expect("Could not create multiplexed Redis Connection.");
 
-    let api = filters::todos(ctx);
+    let api = filters::todos::todos(ctx);
 
     // View access logs by setting `RUST_LOG=todos`.
     let routes = api.with(warp::log("todos"));
