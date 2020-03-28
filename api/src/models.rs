@@ -1,13 +1,9 @@
-use redis::{aio::Connection, *};
+use redis::{aio::MultiplexedConnection, *};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{from_slice, to_vec};
-use std::sync::Arc;
 use uuid::Uuid;
 
-#[derive(Clone)]
-pub struct Context {
-    pub connection: Arc<Connection>,
-}
+pub type Context = MultiplexedConnection;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PartialTodo {

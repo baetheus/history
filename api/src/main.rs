@@ -3,7 +3,8 @@ mod filters;
 mod handlers;
 mod models;
 
-use std::{env, sync::Arc};
+use redis::Client;
+use std::env;
 use warp::Filter;
 
 /// Provides a RESTful web server managing some Todos.
@@ -12,7 +13,7 @@ use warp::Filter;
 ///
 /// - `GET /todos`: return a JSON list of Todos.
 /// - `POST /todos`: create a new Todo.
-/// - `PUT /todos/:id`: update a specific Todo.
+/// - `PUT /todos`: update a specific Todo.
 /// - `DELETE /todos/:id`: delete a specific Todo.
 #[tokio::main]
 async fn main() {
@@ -24,19 +25,16 @@ async fn main() {
     }
     env_logger::init();
 
-    let client = redis::Client::open(redis_address.clone()).expect(&format!(
+    let client = Client::open(redis_address.clone()).expect(&format!(
         "Unable to open client connection to {}",
         &redis_address
     ));
-    let connection = Arc::new(
-        client
-            .get_async_connection()
-            .await
-            .expect("Unable to get async redis client connection."),
-    );
-    let context = models::Context { connection };
+    let ctx = client
+        .get_multiplexed_tokio_connection()
+        .await
+        .expect("Could not create multiplexed Redis Connection.");
 
-    let api = filters::todos(context);
+    let api = filters::todos(ctx);
 
     // View access logs by setting `RUST_LOG=todos`.
     let routes = api.with(warp::log("todos"));
