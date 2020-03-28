@@ -9,15 +9,31 @@ fn map_redis(error: RedisError) -> ApiError {
     ApiError::Redis(error)
 }
 
-pub async fn list_todos(_: ListOptions, mut ctx: Context) -> Result<impl warp::Reply, Rejection> {
+pub async fn list_todos(
+    opts: ListOptions,
+    mut ctx: Context,
+) -> Result<impl warp::Reply, Rejection> {
     let keys: Vec<String> = ctx.keys("todos:*").await.map_err(map_redis)?;
+    let keys: Vec<String> = keys
+        .into_iter()
+        .skip(opts.offset.unwrap_or(0))
+        .take(opts.limit.unwrap_or(std::usize::MAX))
+        .collect();
 
-    if keys.len() == 0 {
-        let todos: Vec<Todo> = vec![];
-        Ok(warp::reply::json(&todos))
-    } else {
-        let todos: Vec<Todo> = ctx.get(keys).await.map_err(map_redis)?;
-        Ok(warp::reply::json(&todos))
+    match &keys.len() {
+        0 => {
+            let todos: Vec<Todo> = vec![];
+            Ok(warp::reply::json(&todos))
+        }
+        1 => {
+            let todo: Todo = ctx.get(keys).await.map_err(map_redis)?;
+            let todos = vec![todo];
+            Ok(warp::reply::json(&todos))
+        }
+        _ => {
+            let todos: Vec<Todo> = ctx.get(keys).await.map_err(map_redis)?;
+            Ok(warp::reply::json(&todos))
+        }
     }
 }
 
