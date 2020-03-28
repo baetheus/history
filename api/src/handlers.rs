@@ -38,10 +38,11 @@ pub async fn create_todo(
     };
 
     log::debug!("create_todo: {:?}", todo);
-    let res: Result<Value, RedisError> = ctx.set(&format!("todos:{}", todo.id), todo).await;
+    let res: Result<Value, RedisError> =
+        ctx.set(&format!("todos:{}", &todo.id), todo.clone()).await;
 
     match res {
-        Ok(_) => Ok(StatusCode::CREATED),
+        Ok(_) => Ok(warp::reply::json(&todo)),
         Err(error) => Err(custom(ApiError::Redis(error))),
     }
 }

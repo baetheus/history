@@ -41,10 +41,6 @@ pub fn todos_update(ctx: Context) -> impl Filter<Extract = impl Reply, Error = R
 /// DELETE /todos/:id
 pub fn todos_delete(ctx: Context) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
     warp::path!("todos" / Uuid)
-        // It is important to put the auth check _after_ the path filters.
-        // If we put the auth check before, the request `PUT /todos/invalid-string`
-        // would try this filter and reject because the authorization header doesn't match,
-        // rather because the param is wrong for that other path.
         .and(warp::delete())
         .and(with_db(ctx))
         .and_then(handlers::delete_todo)
