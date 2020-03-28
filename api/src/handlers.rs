@@ -1,29 +1,23 @@
 use super::errors::*;
 
 use super::models::*;
-use redis::{AsyncCommands, RedisError, Value};
+use redis::{AsyncCommands, RedisError};
 use uuid::Uuid;
-use warp::{
-    http::StatusCode,
-    reject::{custom, Rejection},
-};
+use warp::{http::StatusCode, reject::Rejection};
+
+fn map_redis(error: RedisError) -> ApiError {
+    ApiError::Redis(error)
+}
 
 pub async fn list_todos(_: ListOptions, mut ctx: Context) -> Result<impl warp::Reply, Rejection> {
-    let keys: Result<Vec<String>, RedisError> = ctx.keys("todos:*").await;
-    let keys = match keys {
-        Ok(keys) => keys,
-        Err(error) => return Err(custom(ApiError::Redis(error))),
-    };
+    let keys: Vec<String> = ctx.keys("todos:*").await.map_err(map_redis)?;
 
     if keys.len() == 0 {
         let todos: Vec<Todo> = vec![];
         Ok(warp::reply::json(&todos))
     } else {
-        let todos: Result<Vec<Todo>, RedisError> = ctx.get(keys).await;
-        match todos {
-            Ok(todos) => Ok(warp::reply::json(&todos)),
-            Err(error) => Err(custom(ApiError::Redis(error))),
-        }
+        let todos: Vec<Todo> = ctx.get(keys).await.map_err(map_redis)?;
+        Ok(warp::reply::json(&todos))
     }
 }
 
@@ -38,55 +32,45 @@ pub async fn create_todo(
     };
 
     log::debug!("create_todo: {:?}", todo);
-    let res: Result<Value, RedisError> =
-        ctx.set(&format!("todos:{}", &todo.id), todo.clone()).await;
 
-    match res {
-        Ok(_) => Ok(warp::reply::json(&todo)),
-        Err(error) => Err(custom(ApiError::Redis(error))),
-    }
+    ctx.set(&format!("todos:{}", &todo.id), todo.clone())
+        .await
+        .map_err(map_redis)?;
+
+    Ok(warp::reply::json(&todo))
 }
 
 pub async fn update_todo(todo: Todo, mut ctx: Context) -> Result<impl warp::Reply, Rejection> {
     log::debug!("update_todo: todo={:?}", todo);
 
-    let exists: Result<bool, RedisError> = ctx.exists(format!("todos:{}", todo.id)).await;
+    let exists: bool = ctx
+        .exists(format!("todos:{}", todo.id))
+        .await
+        .map_err(map_redis)?;
 
-    match exists {
-        Ok(exists) => {
-            if exists {
-                let res: Result<Value, RedisError> =
-                    ctx.set(&format!("todos:{}", todo.id), todo).await;
+    if exists {
+        ctx.set(&format!("todos:{}", todo.id), todo)
+            .await
+            .map_err(map_redis)?;
 
-                match res {
-                    Ok(_) => Ok(StatusCode::OK),
-                    Err(e) => Err(custom(ApiError::Redis(e))),
-                }
-            } else {
-                Ok(StatusCode::NOT_FOUND)
-            }
-        }
-        Err(e) => Err(custom(ApiError::Redis(e))),
+        Ok(StatusCode::OK)
+    } else {
+        Ok(StatusCode::NOT_FOUND)
     }
 }
 
 pub async fn delete_todo(id: Uuid, mut ctx: Context) -> Result<impl warp::Reply, Rejection> {
     log::debug!("delete_todo: id={}", id);
 
-    let exists: Result<bool, RedisError> = ctx.exists(format!("todos:{}", id)).await;
+    let exists: bool = ctx
+        .exists(format!("todos:{}", id))
+        .await
+        .map_err(map_redis)?;
 
-    match exists {
-        Ok(exists) => {
-            if exists {
-                let res: Result<Value, RedisError> = ctx.del(format!("todos:{}", id)).await;
-                match res {
-                    Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(e) => Err(custom(ApiError::Redis(e))),
-                }
-            } else {
-                Ok(StatusCode::NOT_FOUND)
-            }
-        }
-        Err(e) => Err(custom(ApiError::Redis(e))),
+    if exists {
+        ctx.del(format!("todos:{}", id)).await.map_err(map_redis)?;
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Ok(StatusCode::NOT_FOUND)
     }
 }
